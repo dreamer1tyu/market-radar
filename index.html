@@ -3,80 +3,90 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Market Radar | 穩定數據校準版</title>
+    <title>Market Radar Pro | 30+ 全球資產監控</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=Noto+Sans+TC:wght@400;700;900&display=swap');
-        body { font-family: 'Inter', 'Noto Sans TC', sans-serif; background-color: #000; color: #fff; }
-        .stock-card { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); border: 1px solid #1a1a1a; background: #080808; }
-        .stock-card:hover { border-color: #3b82f6; transform: translateY(-4px); background: #0c0c0c; box-shadow: 0 10px 30px -10px rgba(59,130,246,0.3); }
-        .mono { font-family: 'ui-monospace', monospace; }
-        .filter-active { background: #3b82f6 !important; color: white !important; }
+        body { font-family: 'Inter', 'Noto Sans TC', sans-serif; background-color: #000; color: #fff; overflow-x: hidden; }
+        .asset-card { transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); background: #080808; border: 1px solid #1a1a1a; position: relative; }
+        .asset-card:hover { transform: translateY(-5px); border-color: #3b82f6; box-shadow: 0 10px 30px rgba(59, 130, 246, 0.15); }
+        .mono { font-family: 'ui-monospace', 'Cascadia Code', monospace; }
+        .loading-bar { height: 2px; background: #3b82f6; width: 0%; transition: width 0.3s; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
-        .loading-shimmer { background: linear-gradient(90deg, #0a0a0a 25%, #1a1a1a 50%, #0a0a0a 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
-        @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
     </style>
 </head>
-<body class="min-h-screen pb-24">
+<body class="min-h-screen pb-20">
 
-    <nav class="sticky top-0 z-50 bg-black/80 backdrop-blur-xl border-b border-gray-800 px-6 py-4">
+    <div id="loader" class="fixed top-0 left-0 w-full z-[100]">
+        <div class="loading-bar" id="progress-bar"></div>
+    </div>
+
+    <!-- 頂部導航 -->
+    <nav class="sticky top-0 z-50 bg-black/90 backdrop-blur-md border-b border-white/5 px-6 py-4">
         <div class="max-w-7xl mx-auto flex justify-between items-center">
-            <div>
-                <h1 class="text-xl font-black italic text-blue-500 tracking-tighter">MARKET RADAR</h1>
-                <p id="sync-status" class="text-[9px] text-gray-500 uppercase mono mt-0.5">初始化系統中...</p>
+            <div class="flex items-center gap-3">
+                <div class="bg-blue-600 p-2 rounded-lg">
+                    <i data-lucide="layout-grid" class="w-5 h-5 text-white"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-black tracking-tighter italic uppercase">Global <span class="text-blue-500">Radar</span></h1>
+                    <p id="sync-status" class="text-[10px] text-gray-500 mono font-bold uppercase tracking-widest">數據鏈路待命中...</p>
+                </div>
             </div>
             <div class="text-right">
-                <div id="fx-rate" class="text-sm font-bold text-blue-400 mono">USD/TWD: --.--</div>
-                <div class="text-[9px] text-gray-600 font-bold uppercase">來源: 即時匯率</div>
+                <p id="fx-rate" class="text-xs font-bold text-blue-400 mono">USD/TWD: --.--</p>
+                <p class="text-[9px] text-gray-600 font-bold uppercase">即時匯率校準</p>
             </div>
         </div>
     </nav>
 
-    <div class="max-w-7xl mx-auto px-6 mt-8 space-y-6">
-        <div class="relative">
-            <i data-lucide="search" class="absolute left-5 top-1/2 -translate-y-1/2 text-gray-600 w-5 h-5"></i>
-            <input type="text" id="search-input" placeholder="搜尋代號或名稱..." oninput="render()"
-                class="w-full bg-[#0d0d0d] border border-gray-800 rounded-2xl py-4 pl-14 pr-6 text-sm focus:border-blue-500 outline-none transition-all">
+    <!-- 搜尋與過濾 -->
+    <header class="max-w-7xl mx-auto px-6 mt-10">
+        <div class="relative group">
+            <i data-lucide="search" class="absolute left-6 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-blue-500 transition-colors"></i>
+            <input type="text" id="search-input" placeholder="搜尋 2330, NVDA, 比特幣..." oninput="render()"
+                class="w-full bg-[#0d0d0d] border border-white/5 rounded-2xl py-5 pl-16 pr-8 text-sm focus:ring-1 focus:ring-blue-500 outline-none transition-all">
         </div>
-        
-        <div class="flex gap-2 overflow-x-auto no-scrollbar pb-2">
-            <button onclick="setFilter('all')" class="filter-btn filter-active px-5 py-2 rounded-full bg-gray-900 text-[10px] font-black uppercase">全部市場</button>
-            <button onclick="setFilter('tw')" class="filter-btn px-5 py-2 rounded-full bg-gray-900 text-[10px] font-black uppercase text-gray-400">台股標的</button>
-            <button onclick="setFilter('us')" class="filter-btn px-5 py-2 rounded-full bg-gray-900 text-[10px] font-black uppercase text-gray-400">美股標的</button>
-            <button onclick="setFilter('crypto')" class="filter-btn px-5 py-2 rounded-full bg-gray-900 text-[10px] font-black uppercase text-gray-400">加密貨幣</button>
+
+        <div class="flex gap-3 mt-6 overflow-x-auto pb-2 no-scrollbar">
+            <button id="btn-all" onclick="setFilter('all')" class="filter-btn bg-blue-600 text-white px-6 py-2 rounded-full text-[10px] font-black uppercase whitespace-nowrap">全部市場</button>
+            <button id="btn-tw" onclick="setFilter('tw')" class="filter-btn bg-gray-900 text-gray-400 px-6 py-2 rounded-full text-[10px] font-black uppercase whitespace-nowrap">台股 (15)</button>
+            <button id="btn-us" onclick="setFilter('us')" class="filter-btn bg-gray-900 text-gray-400 px-6 py-2 rounded-full text-[10px] font-black uppercase whitespace-nowrap">美股 (10)</button>
+            <button id="btn-crypto" onclick="setFilter('crypto')" class="filter-btn bg-gray-900 text-gray-400 px-6 py-2 rounded-full text-[10px] font-black uppercase whitespace-nowrap">加密貨幣 (8)</button>
         </div>
-    </div>
+    </header>
 
-    <main class="max-w-7xl mx-auto p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" id="main-list"></main>
+    <!-- 主列表 -->
+    <main class="max-w-7xl mx-auto p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4" id="asset-grid"></main>
 
-    <div id="detail-modal" class="fixed inset-0 z-[60] flex items-center justify-center hidden opacity-0 transition-opacity duration-300">
-        <div class="absolute inset-0 bg-black/95 backdrop-blur-md" onclick="closeModal()"></div>
-        <div id="modal-panel" class="relative bg-[#0d0d0d] w-full max-w-xl mx-4 rounded-[2.5rem] border border-gray-800 overflow-hidden shadow-2xl">
+    <!-- 資產詳情 -->
+    <div id="modal" class="fixed inset-0 z-[100] flex items-center justify-center hidden">
+        <div class="absolute inset-0 bg-black/95 backdrop-blur-lg" onclick="closeModal()"></div>
+        <div class="relative bg-[#0a0a0a] w-full max-w-xl mx-4 rounded-[2.5rem] border border-white/10 overflow-hidden">
             <div class="p-8">
-                <div class="flex justify-between mb-8">
-                    <div id="modal-header">
-                        <span id="modal-tag" class="bg-blue-600 px-2 py-0.5 rounded text-[10px] font-black mono uppercase">MARKET</span>
-                        <h2 id="modal-title" class="text-3xl font-black mt-2">--</h2>
-                        <p id="modal-ticker" class="text-blue-500 mono text-sm font-bold uppercase"></p>
+                <div class="flex justify-between items-start mb-8">
+                    <div>
+                        <span class="bg-blue-600 text-[9px] font-black px-2 py-0.5 rounded uppercase">Verified</span>
+                        <h2 id="modal-name" class="text-3xl font-black mt-2 tracking-tight">--</h2>
+                        <p id="modal-ticker" class="text-blue-500 mono font-bold text-sm tracking-widest uppercase"></p>
                     </div>
-                    <button onclick="closeModal()" class="text-gray-500 hover:text-white bg-gray-900 p-2 rounded-full"><i data-lucide="x"></i></button>
+                    <button onclick="closeModal()" class="bg-gray-900 p-2 rounded-xl">
+                        <i data-lucide="x" class="w-5 h-5 text-gray-500"></i>
+                    </button>
                 </div>
-                <div class="space-y-6">
-                    <div class="grid grid-cols-2 gap-4">
-                        <div class="bg-blue-600/5 border border-blue-500/20 p-5 rounded-3xl">
-                            <p class="text-[10px] font-black text-gray-500 uppercase mb-2">每股 / 單位報價</p>
-                            <div id="modal-price-share" class="text-2xl font-black mono tracking-tighter">NT$ --</div>
-                        </div>
-                        <div class="bg-gray-900/50 border border-white/5 p-5 rounded-3xl">
-                            <p class="text-[10px] font-black text-gray-500 uppercase mb-2">每張 (1000股) 報價</p>
-                            <div id="modal-price-lot" class="text-2xl font-black mono tracking-tighter text-blue-400">NT$ --</div>
-                        </div>
+                <div class="grid grid-cols-2 gap-4 mb-6">
+                    <div class="bg-blue-600/5 border border-blue-500/20 p-6 rounded-3xl">
+                        <p class="text-[9px] font-black text-blue-400 uppercase mb-1">即時報價 (TWD)</p>
+                        <div id="modal-price-twd" class="text-2xl font-black mono">NT$ --</div>
                     </div>
-                    <div class="bg-[#111] p-6 rounded-3xl border border-white/5">
-                        <h4 class="text-[10px] font-bold text-gray-500 uppercase mb-2 italic">資產簡介</h4>
-                        <p id="modal-intro" class="text-gray-400 text-sm leading-relaxed"></p>
+                    <div class="bg-white/5 p-6 rounded-3xl">
+                        <p id="modal-lot-label" class="text-[9px] font-black text-gray-500 uppercase mb-1">交易單位報價</p>
+                        <div id="modal-price-lot" class="text-2xl font-black mono text-gray-300">NT$ --</div>
                     </div>
+                </div>
+                <div class="bg-black p-6 rounded-3xl border border-white/5">
+                    <p id="modal-intro" class="text-gray-400 text-xs leading-relaxed font-medium"></p>
                 </div>
             </div>
         </div>
@@ -85,179 +95,191 @@
     <script>
         const apiKey = ""; 
         const SYMBOLS = [
-            { id: '2330.TW', ticker: '2330', name: '台積電', type: 'tw', lotSize: 1000, intro: '全球半導體製造龍頭，AI 晶片最核心供應商。', base: 1055 },
-            { id: '2317.TW', ticker: '2317', name: '鴻海', type: 'tw', lotSize: 1000, intro: '全球最大電子代工集團，正轉型電動車與 AI 伺服器。', base: 214 },
-            { id: '2454.TW', ticker: '2454', name: '聯發科', type: 'tw', lotSize: 1000, intro: '台灣 IC 設計龍頭，專注手機晶片與運算平台。', base: 1220 },
-            { id: '2382.TW', ticker: '2382', name: '廣達', type: 'tw', lotSize: 1000, intro: 'AI 伺服器主要組裝商，全球筆電代工龍頭。', base: 295 },
-            { id: '2308.TW', ticker: '2308', name: '台達電', type: 'tw', lotSize: 1000, intro: '電源管理專家，在工業自動化與電動車配件有優勢。', base: 390 },
-            { id: 'AAPL', ticker: 'AAPL', name: '蘋果', type: 'us', lotSize: 1, intro: '全球科技品牌巔峰，擁抱 iPhone 生態系與服務。', base: 232 },
-            { id: 'NVDA', ticker: 'NVDA', name: '輝達', type: 'us', lotSize: 1, intro: 'AI 革命的核心動力，GPU 與算力平台的絕對主宰。', base: 146 },
-            { id: 'TSLA', ticker: 'TSLA', name: '特斯拉', type: 'us', lotSize: 1, intro: '電動車先驅，在自動駕駛與機器人領域發展迅速。', base: 330 },
-            { id: 'BTCUSDT', ticker: 'BTC', name: '比特幣', type: 'crypto', lotSize: 1, intro: '去中心化數位資產，常被視為數位黃金。' },
-            { id: 'ETHUSDT', ticker: 'ETH', name: '乙太幣', type: 'crypto', lotSize: 1, intro: '全球最大的智慧合約平台，DeFi 生態系的基石。' },
-            { id: '2881.TW', ticker: '2881', name: '富邦金', type: 'tw', lotSize: 1000, intro: '金融獲利王，壽險與產險業務廣大。', base: 92 },
-            { id: 'MSFT', ticker: 'MSFT', name: '微軟', type: 'us', lotSize: 1, intro: '軟體與雲端巨頭。', base: 415 },
-            { id: 'SOLUSDT', ticker: 'SOL', name: 'Solana', type: 'crypto', lotSize: 1, intro: '極速高效能公鏈。' }
+            // 台股 (15 隻)
+            { id: '2330.TW', ticker: '2330', name: '台積電', type: 'tw', lot: 1000, intro: '全球晶圓代工龍頭，AI 晶片核心製造商。' },
+            { id: '2317.TW', ticker: '2317', name: '鴻海', type: 'tw', lot: 1000, intro: '全球電子代工巨頭，積極佈局 AI 伺服器與電動車。' },
+            { id: '2454.TW', ticker: '2454', name: '聯發科', type: 'tw', lot: 1000, intro: '手機與物聯網晶片設計領袖。' },
+            { id: '2382.TW', ticker: '2382', name: '廣達', type: 'tw', lot: 1000, intro: 'AI 伺服器組裝與筆電代工龍頭。' },
+            { id: '2308.TW', ticker: '2308', name: '台達電', type: 'tw', lot: 1000, intro: '全球電源管理與散熱方案專家。' },
+            { id: '2881.TW', ticker: '2881', name: '富邦金', type: 'tw', lot: 1000, intro: '台灣金融龍頭，獲利能力長期領先。' },
+            { id: '2882.TW', ticker: '2882', name: '國泰金', type: 'tw', lot: 1000, intro: '壽險與銀行雙引擎的金融巨擘。' },
+            { id: '2412.TW', ticker: '2412', name: '中華電', type: 'tw', lot: 1000, intro: '電信龍頭，屬穩定防禦型資產。' },
+            { id: '2603.TW', ticker: '2603', name: '長榮', type: 'tw', lot: 1000, intro: '全球領先海運公司，貨櫃運輸主力。' },
+            { id: '2357.TW', ticker: '2357', name: '華碩', type: 'tw', lot: 1000, intro: '全球電腦與主機板領導品牌。' },
+            { id: '3711.TW', ticker: '3711', name: '日月光投控', type: 'tw', lot: 1000, intro: '全球最大半導體封測廠。' },
+            { id: '3008.TW', ticker: '3008', name: '大立光', type: 'tw', lot: 1000, intro: '全球高階鏡頭關鍵供應商。' },
+            { id: '2303.TW', ticker: '2303', name: '聯電', type: 'tw', lot: 1000, intro: '成熟製程晶圓代工大廠。' },
+            { id: '2609.TW', ticker: '2609', name: '陽明', type: 'tw', lot: 1000, intro: '台灣重要海運企業。' },
+            { id: '2891.TW', ticker: '2891', name: '中信金', type: 'tw', lot: 1000, intro: '個人金融與財富管理市場領導者。' },
+
+            // 美股 (10 隻)
+            { id: 'AAPL', ticker: 'AAPL', name: '蘋果', type: 'us', lot: 1, intro: '全球最有價值的消費電子與軟體生態系公司。' },
+            { id: 'NVDA', ticker: 'NVDA', name: '輝達', type: 'us', lot: 1, intro: 'AI 計算與 GPU 視覺運算的絕對領導者。' },
+            { id: 'MSFT', ticker: 'MSFT', name: '微軟', type: 'us', lot: 1, intro: '雲端運算 Azure 與生成式 AI 的商業先驅。' },
+            { id: 'TSLA', ticker: 'TSLA', name: '特斯拉', type: 'us', lot: 1, intro: '電動車、能源儲存與自駕技術開拓者。' },
+            { id: 'GOOGL', ticker: 'GOOGL', name: 'Google', type: 'us', lot: 1, intro: '全球搜尋引擎與數位廣告市場霸主。' },
+            { id: 'AMZN', ticker: 'AMZN', name: '亞馬遜', type: 'us', lot: 1, intro: '電商巨擘與雲端運算服務領導者。' },
+            { id: 'META', ticker: 'META', name: 'Meta', type: 'us', lot: 1, intro: '全球最大社群網路平台與元宇宙開發商。' },
+            { id: 'BRK.B', ticker: 'BRK.B', name: '波克夏', type: 'us', lot: 1, intro: '巴菲特的投資王國，橫跨保險、能源與製造。' },
+            { id: 'AMD', ticker: 'AMD', name: '超微', type: 'us', lot: 1, intro: '輝達在 AI 與高效能運算領域的主要競爭對手。' },
+            { id: 'MSTR', ticker: 'MSTR', name: '微策科技', type: 'us', lot: 1, intro: '全球持有最多比特幣的上市企業。' },
+
+            // 加密貨幣 (8 隻)
+            { id: 'BTCUSDT', ticker: 'BTC', name: '比特幣', type: 'crypto', lot: 1, intro: '首個去中心化加密資產，數位黃金。' },
+            { id: 'ETHUSDT', ticker: 'ETH', name: '乙太幣', type: 'crypto', lot: 1, intro: '智慧合約平台，Web3 應用的底層。' },
+            { id: 'SOLUSDT', ticker: 'SOL', name: 'Solana', type: 'crypto', lot: 1, intro: '高效能公鏈，以速度與低成本著稱。' },
+            { id: 'BNBUSDT', ticker: 'BNB', name: '幣安幣', type: 'crypto', lot: 1, intro: '全球最大交易所 Binance 的原生代幣。' },
+            { id: 'DOGEUSDT', ticker: 'DOGE', name: '狗狗幣', type: 'crypto', lot: 1, intro: '最具知名度的迷因幣與支付實驗。' },
+            { id: 'XRPUSDT', ticker: 'XRP', name: '瑞波幣', type: 'crypto', lot: 1, intro: '專為跨境結算設計的加密解決方案。' },
+            { id: 'ADAUSDT', ticker: 'ADA', name: 'Cardano', type: 'crypto', lot: 1, intro: '注重學術驗證與安全性設計的區塊鏈。' },
+            { id: 'AVAXUSDT', ticker: 'AVAX', name: 'Avalanche', type: 'crypto', lot: 1, intro: '主打高度可擴展與自定義子網。' }
         ];
 
         let marketData = {};
-        let usdToTwd = 32.4;
+        let usdToTwd = 32.5;
         let currentFilter = 'all';
 
         async function fetchWithRetry(url, options, retries = 5, backoff = 1000) {
-            for (let i = 0; i < retries; i++) {
-                try {
-                    const response = await fetch(url, options);
-                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                    const text = await response.text();
-                    if (!text) throw new Error("Empty response");
-                    return JSON.parse(text);
-                } catch (err) {
-                    if (i === retries - 1) throw err;
-                    await new Promise(resolve => setTimeout(resolve, backoff));
-                    backoff *= 2;
+            try {
+                const response = await fetch(url, options);
+                if (!response.ok) throw new Error(`Status: ${response.status}`);
+                return await response.json();
+            } catch (error) {
+                if (retries > 0) {
+                    await new Promise(r => setTimeout(r, backoff));
+                    return fetchWithRetry(url, options, retries - 1, backoff * 2);
                 }
+                throw error;
             }
         }
 
-        async function init() {
-            renderLoading();
-            await fetchFxRate();
-            await syncAllData();
-            setInterval(syncAllData, 60000); 
-        }
-
-        async function fetchFxRate() {
+        async function syncData() {
+            const pb = document.getElementById('progress-bar');
+            pb.style.width = '20%';
+            
             try {
-                const data = await fetchWithRetry('https://api.exchangerate-api.com/v4/latest/USD');
-                usdToTwd = data.rates.TWD;
+                // 匯率同步
+                const fxData = await fetchWithRetry('https://api.exchangerate-api.com/v4/latest/USD');
+                usdToTwd = fxData.rates.TWD;
                 document.getElementById('fx-rate').innerText = `USD/TWD: ${usdToTwd.toFixed(2)}`;
-            } catch(e) { console.warn("匯率 API 故障，使用預設值"); }
-        }
+                pb.style.width = '40%';
 
-        async function syncAllData() {
-            try {
-                // 1. 獲取加密貨幣行情 (Binance)
-                const cryptoList = await fetchWithRetry('https://api.binance.com/api/v3/ticker/24hr');
+                // 加密貨幣同步
+                const cryptos = await fetchWithRetry('https://api.binance.com/api/v3/ticker/24hr');
+                pb.style.width = '60%';
 
-                // 2. 獲取台美股行情 (Gemini Search 校準)
-                let aiPrices = {};
+                // 批次 AI 搜尋校準
+                const tickers = SYMBOLS.filter(s => s.type !== 'crypto').map(s => s.ticker).join(",");
+                const searchPrompt = `提供以下標的今日收盤價與漲跌幅%：${tickers}。僅回傳 JSON 格式：{"TICKER": {"p": 價格, "c": 漲跌%}}。`;
+
+                const aiData = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: searchPrompt }] }],
+                        tools: [{ "google_search": {} }]
+                    })
+                });
+                
+                const raw = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+                let priceMap = {};
                 try {
-                    const tickers = SYMBOLS.filter(s => s.type !== 'crypto').map(s => s.ticker).join(", ");
-                    const result = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            contents: [{ parts: [{ text: `目前最新股價與漲跌幅：${tickers}。格式：{"TICKER": {"price": number, "change": number}}。僅輸出 JSON。` }] }],
-                            tools: [{ "google_search": {} }]
-                        })
-                    });
-                    const text = result.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
-                    const jsonMatch = text.match(/\{[\s\S]*\}/);
-                    if (jsonMatch) aiPrices = JSON.parse(jsonMatch[0]);
-                } catch (aiErr) {
-                    console.warn("AI 數據更新失敗，使用基準數據");
-                }
+                    const match = raw.match(/\{[\s\S]*\}/);
+                    if (match) priceMap = JSON.parse(match[0]);
+                } catch (e) { console.error("Parse Error", raw); }
 
                 SYMBOLS.forEach(s => {
                     if (s.type === 'crypto') {
-                        const target = cryptoList.find(c => c.symbol === s.id);
-                        if (target) {
-                            marketData[s.id] = { ...s, price: parseFloat(target.lastPrice), change: parseFloat(target.priceChangePercent) };
-                        }
+                        const t = Array.isArray(cryptos) ? cryptos.find(c => c.symbol === s.id) : null;
+                        if (t) marketData[s.id] = { price: parseFloat(t.lastPrice), change: parseFloat(t.priceChangePercent) };
                     } else {
-                        const real = aiPrices[s.ticker];
-                        marketData[s.id] = {
-                            ...s,
-                            price: real ? real.price : (s.base || 100),
-                            change: real ? real.change : (Math.random() * 2 - 1) // 兜底隨機波動
-                        };
+                        const t = priceMap[s.ticker];
+                        if (t) marketData[s.id] = { price: t.p, change: t.c };
+                        else if (!marketData[s.id]) marketData[s.id] = { price: 0, change: 0 };
                     }
                 });
 
-                document.getElementById('sync-status').innerText = `同步完成: ${new Date().toLocaleTimeString()}`;
+                document.getElementById('sync-status').innerText = `已精準同步: ${new Date().toLocaleTimeString()}`;
+            } catch (err) {
+                document.getElementById('sync-status').innerText = "連線異常，自動切換至緩存數據...";
+            } finally {
+                pb.style.width = '100%';
+                setTimeout(() => pb.style.width = '0%', 1000);
                 render();
-            } catch (e) {
-                console.error("同步失敗:", e);
-                document.getElementById('sync-status').innerText = "數據校準緩衝中...";
             }
         }
 
-        function renderLoading() {
-            const list = document.getElementById('main-list');
-            list.innerHTML = Array(8).fill(0).map(() => `<div class="loading-shimmer h-40 rounded-[2rem]"></div>`).join('');
-        }
-
         function render() {
-            const list = document.getElementById('main-list');
+            const grid = document.getElementById('asset-grid');
             const search = document.getElementById('search-input').value.toLowerCase();
-            list.innerHTML = '';
+            grid.innerHTML = '';
 
             SYMBOLS.filter(s => {
                 const matchType = currentFilter === 'all' || s.type === currentFilter;
                 const matchSearch = s.name.includes(search) || s.ticker.toLowerCase().includes(search);
                 return matchType && matchSearch;
             }).forEach(s => {
-                const d = marketData[s.id];
-                if (!d) return;
-
-                const priceTwd = d.type === 'tw' ? d.price : d.price * usdToTwd;
-                const isUp = d.change >= 0;
+                const data = marketData[s.id] || { price: 0, change: 0 };
+                const displayPrice = s.type === 'tw' ? data.price : data.price * usdToTwd;
+                const isUp = data.change >= 0;
 
                 const card = document.createElement('div');
-                card.className = 'stock-card rounded-[2rem] p-6 flex flex-col justify-between cursor-pointer';
+                card.className = 'asset-card rounded-[1.5rem] p-5 cursor-pointer flex flex-col justify-between h-40';
                 card.onclick = () => openModal(s.id);
                 card.innerHTML = `
                     <div class="flex justify-between items-start">
                         <div>
-                            <span class="text-[9px] font-black text-blue-500 mono uppercase">${s.ticker}</span>
-                            <h3 class="font-black text-lg text-gray-200">${s.name}</h3>
+                            <p class="text-[9px] mono font-bold text-blue-500 uppercase">${s.ticker}</p>
+                            <h3 class="text-sm font-black text-gray-200">${s.name}</h3>
                         </div>
-                        <span class="text-[8px] bg-gray-900 px-2 py-0.5 rounded text-gray-500 font-black uppercase">${s.type}</span>
+                        <i data-lucide="${s.type === 'crypto' ? 'coins' : 'trending-up'}" class="w-3 h-3 text-gray-600"></i>
                     </div>
-                    <div class="mt-6">
-                        <div class="text-[9px] text-gray-500 uppercase font-black mb-1 italic">即時校準 (NT$)</div>
-                        <div class="text-2xl font-black mono tracking-tighter">NT$ ${priceTwd.toLocaleString(undefined, {maximumFractionDigits: 1})}</div>
-                        <div class="flex justify-between items-center mt-2">
-                            <span class="text-[10px] mono text-gray-600">${d.price.toLocaleString()} ${d.type==='tw'?'TWD':'USD'}</span>
-                            <span class="text-xs font-black mono ${isUp ? 'text-red-500' : 'text-green-500'}">${isUp?'▲':'▼'} ${Math.abs(d.change).toFixed(2)}%</span>
+                    <div>
+                        <div class="text-lg font-black mono tracking-tighter">
+                            NT$ ${displayPrice.toLocaleString(undefined, {maximumFractionDigits: displayPrice < 100 ? 2 : 1})}
+                        </div>
+                        <div class="flex justify-between items-center mt-1">
+                            <span class="text-[8px] mono text-gray-600">${data.price.toLocaleString()} ${s.type === 'tw' ? 'TWD' : 'USD'}</span>
+                            <span class="text-[10px] font-black mono ${isUp ? 'text-red-500' : 'text-green-500'}">
+                                ${isUp ? '▲' : '▼'} ${Math.abs(data.change).toFixed(2)}%
+                            </span>
                         </div>
                     </div>
                 `;
-                list.appendChild(card);
+                grid.appendChild(card);
             });
             lucide.createIcons();
         }
 
         function openModal(id) {
-            const d = marketData[id];
-            const modal = document.getElementById('detail-modal');
-            const priceTwd = d.type === 'tw' ? d.price : d.price * usdToTwd;
-            
-            document.getElementById('modal-title').innerText = d.name;
-            document.getElementById('modal-ticker').innerText = d.ticker;
-            document.getElementById('modal-price-share').innerText = `NT$ ${priceTwd.toLocaleString(undefined, {maximumFractionDigits: 1})}`;
-            document.getElementById('modal-price-lot').innerText = `NT$ ${(priceTwd * d.lotSize).toLocaleString(undefined, {maximumFractionDigits: 0})}`;
-            document.getElementById('modal-intro').innerText = d.intro;
-            
-            modal.classList.remove('hidden');
-            setTimeout(() => modal.classList.add('opacity-100'), 10);
+            const s = SYMBOLS.find(x => x.id === id);
+            const d = marketData[id] || { price: 0, change: 0 };
+            const displayPrice = s.type === 'tw' ? d.price : d.price * usdToTwd;
+
+            document.getElementById('modal-name').innerText = s.name;
+            document.getElementById('modal-ticker').innerText = s.ticker;
+            document.getElementById('modal-price-twd').innerText = `NT$ ${displayPrice.toLocaleString()}`;
+            document.getElementById('modal-price-lot').innerText = `NT$ ${(displayPrice * s.lot).toLocaleString(undefined, {maximumFractionDigits: 0})}`;
+            document.getElementById('modal-lot-label').innerText = s.type === 'tw' ? '每張報價 (1000股)' : '基本單位報價 (1:1)';
+            document.getElementById('modal-intro').innerText = s.intro;
+            document.getElementById('modal').classList.remove('hidden');
+            lucide.createIcons();
         }
 
-        function closeModal() {
-            const modal = document.getElementById('detail-modal');
-            modal.classList.remove('opacity-100');
-            setTimeout(() => modal.classList.add('hidden'), 300);
-        }
+        function closeModal() { document.getElementById('modal').classList.add('hidden'); }
 
-        function setFilter(f) {
-            currentFilter = f;
-            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('filter-active'));
-            event.target.classList.add('filter-active');
+        function setFilter(type) {
+            currentFilter = type;
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.remove('bg-blue-600', 'text-white');
+                btn.classList.add('bg-gray-900', 'text-gray-400');
+            });
+            event.target.classList.remove('bg-gray-900', 'text-gray-400');
+            event.target.classList.add('bg-blue-600', 'text-white');
             render();
         }
 
-        window.onload = init;
+        window.onload = () => { syncData(); setInterval(syncData, 60000); };
     </script>
 </body>
 </html>
