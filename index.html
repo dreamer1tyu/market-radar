@@ -3,153 +3,123 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Market Radar Pro | 30+ 全球資產監控</title>
+    <title>Market Radar Pro | 真實數據鏈路</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=Noto+Sans+TC:wght@400;700;900&display=swap');
-        body { font-family: 'Inter', 'Noto Sans TC', sans-serif; background-color: #000; color: #fff; overflow-x: hidden; }
-        .asset-card { transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); background: #080808; border: 1px solid #1a1a1a; position: relative; }
-        .asset-card:hover { transform: translateY(-5px); border-color: #3b82f6; box-shadow: 0 10px 30px rgba(59, 130, 246, 0.15); }
-        .mono { font-family: 'ui-monospace', 'Cascadia Code', monospace; }
-        .loading-bar { height: 2px; background: #3b82f6; width: 0%; transition: width 0.3s; }
+        body { font-family: 'Inter', 'Noto Sans TC', sans-serif; background-color: #000; color: #fff; }
+        .asset-card { background: #0a0a0a; border: 1px solid #1a1a1a; transition: all 0.2s; }
+        .asset-card:hover { border-color: #3b82f6; background: #0f172a; }
+        .mono { font-family: 'ui-monospace', monospace; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
+        .loading-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
     </style>
 </head>
 <body class="min-h-screen pb-20">
 
-    <div id="loader" class="fixed top-0 left-0 w-full z-[100]">
-        <div class="loading-bar" id="progress-bar"></div>
+    <div class="fixed top-0 left-0 w-full z-[100] h-1 bg-blue-950">
+        <div id="progress-bar" class="h-full bg-blue-500 w-0 transition-all duration-700"></div>
     </div>
 
-    <!-- 頂部導航 -->
-    <nav class="sticky top-0 z-50 bg-black/90 backdrop-blur-md border-b border-white/5 px-6 py-4">
+    <nav class="sticky top-0 z-50 bg-black/90 backdrop-blur-xl border-b border-white/5 px-6 py-4">
         <div class="max-w-7xl mx-auto flex justify-between items-center">
             <div class="flex items-center gap-3">
-                <div class="bg-blue-600 p-2 rounded-lg">
-                    <i data-lucide="layout-grid" class="w-5 h-5 text-white"></i>
+                <div class="p-2 bg-blue-600 rounded-lg">
+                    <i data-lucide="compass" class="w-5 h-5 text-white"></i>
                 </div>
                 <div>
-                    <h1 class="text-xl font-black tracking-tighter italic uppercase">Global <span class="text-blue-500">Radar</span></h1>
-                    <p id="sync-status" class="text-[10px] text-gray-500 mono font-bold uppercase tracking-widest">數據鏈路待命中...</p>
+                    <h1 class="text-xl font-black tracking-tighter uppercase italic">Market <span class="text-blue-500">Radar</span></h1>
+                    <p id="sync-status" class="text-[10px] text-gray-500 mono font-bold uppercase">等待數據校準...</p>
                 </div>
             </div>
             <div class="text-right">
                 <p id="fx-rate" class="text-xs font-bold text-blue-400 mono">USD/TWD: --.--</p>
-                <p class="text-[9px] text-gray-600 font-bold uppercase">即時匯率校準</p>
+                <div class="flex items-center justify-end gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-green-500 loading-pulse"></span>
+                    <p class="text-[9px] text-gray-400 font-bold uppercase tracking-widest">Live Connect</p>
+                </div>
             </div>
         </div>
     </nav>
 
-    <!-- 搜尋與過濾 -->
-    <header class="max-w-7xl mx-auto px-6 mt-10">
-        <div class="relative group">
-            <i data-lucide="search" class="absolute left-6 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-blue-500 transition-colors"></i>
-            <input type="text" id="search-input" placeholder="搜尋 2330, NVDA, 比特幣..." oninput="render()"
-                class="w-full bg-[#0d0d0d] border border-white/5 rounded-2xl py-5 pl-16 pr-8 text-sm focus:ring-1 focus:ring-blue-500 outline-none transition-all">
+    <header class="max-w-7xl mx-auto px-6 mt-8">
+        <div class="relative">
+            <i data-lucide="search" class="absolute left-5 top-1/2 -translate-y-1/2 text-gray-500 w-4 h-4"></i>
+            <input type="text" id="search-input" placeholder="搜尋 30+ 標的 (代號或名稱)..." oninput="render()"
+                class="w-full bg-[#0d0d0d] border border-white/10 rounded-2xl py-4 pl-14 pr-6 text-sm focus:ring-1 focus:ring-blue-500 outline-none transition-all">
         </div>
 
-        <div class="flex gap-3 mt-6 overflow-x-auto pb-2 no-scrollbar">
-            <button id="btn-all" onclick="setFilter('all')" class="filter-btn bg-blue-600 text-white px-6 py-2 rounded-full text-[10px] font-black uppercase whitespace-nowrap">全部市場</button>
-            <button id="btn-tw" onclick="setFilter('tw')" class="filter-btn bg-gray-900 text-gray-400 px-6 py-2 rounded-full text-[10px] font-black uppercase whitespace-nowrap">台股 (15)</button>
-            <button id="btn-us" onclick="setFilter('us')" class="filter-btn bg-gray-900 text-gray-400 px-6 py-2 rounded-full text-[10px] font-black uppercase whitespace-nowrap">美股 (10)</button>
-            <button id="btn-crypto" onclick="setFilter('crypto')" class="filter-btn bg-gray-900 text-gray-400 px-6 py-2 rounded-full text-[10px] font-black uppercase whitespace-nowrap">加密貨幣 (8)</button>
+        <div class="flex gap-2 mt-6 overflow-x-auto no-scrollbar pb-2">
+            <button onclick="setFilter('all', event)" class="filter-btn bg-blue-600 text-white px-6 py-2 rounded-full text-[10px] font-black uppercase whitespace-nowrap">全部市場</button>
+            <button onclick="setFilter('tw', event)" class="filter-btn bg-gray-900 text-gray-400 px-6 py-2 rounded-full text-[10px] font-black uppercase whitespace-nowrap">台灣權值</button>
+            <button onclick="setFilter('us', event)" class="filter-btn bg-gray-900 text-gray-400 px-6 py-2 rounded-full text-[10px] font-black uppercase whitespace-nowrap">美國科技</button>
+            <button onclick="setFilter('crypto', event)" class="filter-btn bg-gray-900 text-gray-400 px-6 py-2 rounded-full text-[10px] font-black uppercase whitespace-nowrap">加密貨幣</button>
         </div>
     </header>
 
-    <!-- 主列表 -->
-    <main class="max-w-7xl mx-auto p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4" id="asset-grid"></main>
-
-    <!-- 資產詳情 -->
-    <div id="modal" class="fixed inset-0 z-[100] flex items-center justify-center hidden">
-        <div class="absolute inset-0 bg-black/95 backdrop-blur-lg" onclick="closeModal()"></div>
-        <div class="relative bg-[#0a0a0a] w-full max-w-xl mx-4 rounded-[2.5rem] border border-white/10 overflow-hidden">
-            <div class="p-8">
-                <div class="flex justify-between items-start mb-8">
-                    <div>
-                        <span class="bg-blue-600 text-[9px] font-black px-2 py-0.5 rounded uppercase">Verified</span>
-                        <h2 id="modal-name" class="text-3xl font-black mt-2 tracking-tight">--</h2>
-                        <p id="modal-ticker" class="text-blue-500 mono font-bold text-sm tracking-widest uppercase"></p>
-                    </div>
-                    <button onclick="closeModal()" class="bg-gray-900 p-2 rounded-xl">
-                        <i data-lucide="x" class="w-5 h-5 text-gray-500"></i>
-                    </button>
-                </div>
-                <div class="grid grid-cols-2 gap-4 mb-6">
-                    <div class="bg-blue-600/5 border border-blue-500/20 p-6 rounded-3xl">
-                        <p class="text-[9px] font-black text-blue-400 uppercase mb-1">即時報價 (TWD)</p>
-                        <div id="modal-price-twd" class="text-2xl font-black mono">NT$ --</div>
-                    </div>
-                    <div class="bg-white/5 p-6 rounded-3xl">
-                        <p id="modal-lot-label" class="text-[9px] font-black text-gray-500 uppercase mb-1">交易單位報價</p>
-                        <div id="modal-price-lot" class="text-2xl font-black mono text-gray-300">NT$ --</div>
-                    </div>
-                </div>
-                <div class="bg-black p-6 rounded-3xl border border-white/5">
-                    <p id="modal-intro" class="text-gray-400 text-xs leading-relaxed font-medium"></p>
-                </div>
-            </div>
-        </div>
-    </div>
+    <main class="max-w-7xl mx-auto p-6 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4" id="asset-grid"></main>
 
     <script>
+        // API Key 必須保持為空字串，執行環境會自動注入有效 Key
         const apiKey = ""; 
+
         const SYMBOLS = [
-            // 台股 (15 隻)
-            { id: '2330.TW', ticker: '2330', name: '台積電', type: 'tw', lot: 1000, intro: '全球晶圓代工龍頭，AI 晶片核心製造商。' },
-            { id: '2317.TW', ticker: '2317', name: '鴻海', type: 'tw', lot: 1000, intro: '全球電子代工巨頭，積極佈局 AI 伺服器與電動車。' },
-            { id: '2454.TW', ticker: '2454', name: '聯發科', type: 'tw', lot: 1000, intro: '手機與物聯網晶片設計領袖。' },
-            { id: '2382.TW', ticker: '2382', name: '廣達', type: 'tw', lot: 1000, intro: 'AI 伺服器組裝與筆電代工龍頭。' },
-            { id: '2308.TW', ticker: '2308', name: '台達電', type: 'tw', lot: 1000, intro: '全球電源管理與散熱方案專家。' },
-            { id: '2881.TW', ticker: '2881', name: '富邦金', type: 'tw', lot: 1000, intro: '台灣金融龍頭，獲利能力長期領先。' },
-            { id: '2882.TW', ticker: '2882', name: '國泰金', type: 'tw', lot: 1000, intro: '壽險與銀行雙引擎的金融巨擘。' },
-            { id: '2412.TW', ticker: '2412', name: '中華電', type: 'tw', lot: 1000, intro: '電信龍頭，屬穩定防禦型資產。' },
-            { id: '2603.TW', ticker: '2603', name: '長榮', type: 'tw', lot: 1000, intro: '全球領先海運公司，貨櫃運輸主力。' },
-            { id: '2357.TW', ticker: '2357', name: '華碩', type: 'tw', lot: 1000, intro: '全球電腦與主機板領導品牌。' },
-            { id: '3711.TW', ticker: '3711', name: '日月光投控', type: 'tw', lot: 1000, intro: '全球最大半導體封測廠。' },
-            { id: '3008.TW', ticker: '3008', name: '大立光', type: 'tw', lot: 1000, intro: '全球高階鏡頭關鍵供應商。' },
-            { id: '2303.TW', ticker: '2303', name: '聯電', type: 'tw', lot: 1000, intro: '成熟製程晶圓代工大廠。' },
-            { id: '2609.TW', ticker: '2609', name: '陽明', type: 'tw', lot: 1000, intro: '台灣重要海運企業。' },
-            { id: '2891.TW', ticker: '2891', name: '中信金', type: 'tw', lot: 1000, intro: '個人金融與財富管理市場領導者。' },
-
-            // 美股 (10 隻)
-            { id: 'AAPL', ticker: 'AAPL', name: '蘋果', type: 'us', lot: 1, intro: '全球最有價值的消費電子與軟體生態系公司。' },
-            { id: 'NVDA', ticker: 'NVDA', name: '輝達', type: 'us', lot: 1, intro: 'AI 計算與 GPU 視覺運算的絕對領導者。' },
-            { id: 'MSFT', ticker: 'MSFT', name: '微軟', type: 'us', lot: 1, intro: '雲端運算 Azure 與生成式 AI 的商業先驅。' },
-            { id: 'TSLA', ticker: 'TSLA', name: '特斯拉', type: 'us', lot: 1, intro: '電動車、能源儲存與自駕技術開拓者。' },
-            { id: 'GOOGL', ticker: 'GOOGL', name: 'Google', type: 'us', lot: 1, intro: '全球搜尋引擎與數位廣告市場霸主。' },
-            { id: 'AMZN', ticker: 'AMZN', name: '亞馬遜', type: 'us', lot: 1, intro: '電商巨擘與雲端運算服務領導者。' },
-            { id: 'META', ticker: 'META', name: 'Meta', type: 'us', lot: 1, intro: '全球最大社群網路平台與元宇宙開發商。' },
-            { id: 'BRK.B', ticker: 'BRK.B', name: '波克夏', type: 'us', lot: 1, intro: '巴菲特的投資王國，橫跨保險、能源與製造。' },
-            { id: 'AMD', ticker: 'AMD', name: '超微', type: 'us', lot: 1, intro: '輝達在 AI 與高效能運算領域的主要競爭對手。' },
-            { id: 'MSTR', ticker: 'MSTR', name: '微策科技', type: 'us', lot: 1, intro: '全球持有最多比特幣的上市企業。' },
-
-            // 加密貨幣 (8 隻)
-            { id: 'BTCUSDT', ticker: 'BTC', name: '比特幣', type: 'crypto', lot: 1, intro: '首個去中心化加密資產，數位黃金。' },
-            { id: 'ETHUSDT', ticker: 'ETH', name: '乙太幣', type: 'crypto', lot: 1, intro: '智慧合約平台，Web3 應用的底層。' },
-            { id: 'SOLUSDT', ticker: 'SOL', name: 'Solana', type: 'crypto', lot: 1, intro: '高效能公鏈，以速度與低成本著稱。' },
-            { id: 'BNBUSDT', ticker: 'BNB', name: '幣安幣', type: 'crypto', lot: 1, intro: '全球最大交易所 Binance 的原生代幣。' },
-            { id: 'DOGEUSDT', ticker: 'DOGE', name: '狗狗幣', type: 'crypto', lot: 1, intro: '最具知名度的迷因幣與支付實驗。' },
-            { id: 'XRPUSDT', ticker: 'XRP', name: '瑞波幣', type: 'crypto', lot: 1, intro: '專為跨境結算設計的加密解決方案。' },
-            { id: 'ADAUSDT', ticker: 'ADA', name: 'Cardano', type: 'crypto', lot: 1, intro: '注重學術驗證與安全性設計的區塊鏈。' },
-            { id: 'AVAXUSDT', ticker: 'AVAX', name: 'Avalanche', type: 'crypto', lot: 1, intro: '主打高度可擴展與自定義子網。' }
+            { id: '2330.TW', ticker: '2330', name: '台積電', type: 'tw' },
+            { id: '2317.TW', ticker: '2317', name: '鴻海', type: 'tw' },
+            { id: '2454.TW', ticker: '2454', name: '聯發科', type: 'tw' },
+            { id: '2382.TW', ticker: '2382', name: '廣達', type: 'tw' },
+            { id: '2308.TW', ticker: '2308', name: '台達電', type: 'tw' },
+            { id: '2881.TW', ticker: '2881', name: '富邦金', type: 'tw' },
+            { id: '2882.TW', ticker: '2882', name: '國泰金', type: 'tw' },
+            { id: '2303.TW', ticker: '2303', name: '聯電', type: 'tw' },
+            { id: '2891.TW', ticker: '2891', name: '中信金', type: 'tw' },
+            { id: '2603.TW', ticker: '2603', name: '長榮', type: 'tw' },
+            { id: '3711.TW', ticker: '3711', name: '日月光投控', type: 'tw' },
+            { id: '2412.TW', ticker: '2412', name: '中華電', type: 'tw' },
+            { id: '2357.TW', ticker: '2357', name: '華碩', type: 'tw' },
+            { id: '3008.TW', ticker: '3008', name: '大立光', type: 'tw' },
+            { id: '2609.TW', ticker: '2609', name: '陽明', type: 'tw' },
+            { id: 'AAPL', ticker: 'AAPL', name: '蘋果', type: 'us' },
+            { id: 'NVDA', ticker: 'NVDA', name: '輝達', type: 'us' },
+            { id: 'MSFT', ticker: 'MSFT', name: '微軟', type: 'us' },
+            { id: 'TSLA', ticker: 'TSLA', name: '特斯拉', type: 'us' },
+            { id: 'GOOGL', ticker: 'GOOGL', name: 'Alphabet', type: 'us' },
+            { id: 'AMZN', ticker: 'AMZN', name: '亞馬遜', type: 'us' },
+            { id: 'META', ticker: 'META', name: 'Meta', type: 'us' },
+            { id: 'BRK.B', ticker: 'BRK.B', name: '波克夏', type: 'us' },
+            { id: 'AMD', ticker: 'AMD', name: '超微', type: 'us' },
+            { id: 'MSTR', ticker: 'MSTR', name: '微策科技', type: 'us' },
+            { id: 'BTCUSDT', ticker: 'BTC', name: '比特幣', type: 'crypto' },
+            { id: 'ETHUSDT', ticker: 'ETH', name: '乙太幣', type: 'crypto' },
+            { id: 'SOLUSDT', ticker: 'SOL', name: 'Solana', type: 'crypto' },
+            { id: 'BNBUSDT', ticker: 'BNB', name: '幣安幣', type: 'crypto' },
+            { id: 'DOGEUSDT', ticker: 'DOGE', name: '狗狗幣', type: 'crypto' },
+            { id: 'XRPUSDT', ticker: 'XRP', name: '瑞波幣', type: 'crypto' },
+            { id: 'ADAUSDT', ticker: 'ADA', name: 'Cardano', type: 'crypto' },
+            { id: 'AVAXUSDT', ticker: 'AVAX', name: 'Avalanche', type: 'crypto' }
         ];
 
         let marketData = {};
         let usdToTwd = 32.5;
         let currentFilter = 'all';
 
-        async function fetchWithRetry(url, options, retries = 5, backoff = 1000) {
-            try {
-                const response = await fetch(url, options);
-                if (!response.ok) throw new Error(`Status: ${response.status}`);
-                return await response.json();
-            } catch (error) {
-                if (retries > 0) {
-                    await new Promise(r => setTimeout(r, backoff));
-                    return fetchWithRetry(url, options, retries - 1, backoff * 2);
+        // 強化版 API 請求工具：包含自動指數退避
+        async function fetchWithRetry(url, options = {}, retries = 5) {
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (!response.ok) {
+                        // 如果是 401 且我們手動加了 Key，可能是因為 Key 為空造成的
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return await response.json();
+                } catch (e) {
+                    if (i === retries - 1) throw e;
+                    const delay = Math.pow(2, i) * 1000;
+                    await new Promise(res => setTimeout(res, delay));
                 }
-                throw error;
             }
         }
 
@@ -158,21 +128,25 @@
             pb.style.width = '20%';
             
             try {
-                // 匯率同步
+                // 1. 獲取匯率 (無需 Key)
                 const fxData = await fetchWithRetry('https://api.exchangerate-api.com/v4/latest/USD');
                 usdToTwd = fxData.rates.TWD;
                 document.getElementById('fx-rate').innerText = `USD/TWD: ${usdToTwd.toFixed(2)}`;
                 pb.style.width = '40%';
 
-                // 加密貨幣同步
+                // 2. 獲取加密貨幣 (Binance 無需 Key)
                 const cryptos = await fetchWithRetry('https://api.binance.com/api/v3/ticker/24hr');
                 pb.style.width = '60%';
 
-                // 批次 AI 搜尋校準
-                const tickers = SYMBOLS.filter(s => s.type !== 'crypto').map(s => s.ticker).join(",");
-                const searchPrompt = `提供以下標的今日收盤價與漲跌幅%：${tickers}。僅回傳 JSON 格式：{"TICKER": {"p": 價格, "c": 漲跌%}}。`;
+                // 3. 獲取股票數據 (Gemini 2.5 Flash)
+                // 注意：環境會自動處理 apiKey 注入，這裡保持 URL 乾淨
+                const stockTickers = SYMBOLS.filter(s => s.type !== 'crypto').map(s => s.ticker).join(", ");
+                const searchPrompt = `提供以下標的的即時收盤價與漲跌幅：${stockTickers}。必須回傳純 JSON 物件：{"TICKER": {"p": 價格, "c": 漲跌幅}}`;
 
-                const aiData = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                // 修正：不要在 URL 手動拼接 ?key=${apiKey}，如果 apiKey 為空，系統會自動在請求頭注入密鑰
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent${apiKey ? `?key=${apiKey}` : ''}`;
+                
+                const aiRes = await fetchWithRetry(apiUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -181,27 +155,35 @@
                     })
                 });
                 
-                const raw = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+                const rawText = aiRes.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+                
                 let priceMap = {};
                 try {
-                    const match = raw.match(/\{[\s\S]*\}/);
-                    if (match) priceMap = JSON.parse(match[0]);
-                } catch (e) { console.error("Parse Error", raw); }
+                    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+                    if (jsonMatch) {
+                        priceMap = JSON.parse(jsonMatch[0]);
+                    }
+                } catch (e) { 
+                    console.error("JSON 解析失敗", e); 
+                }
 
+                // 數據更新整合
                 SYMBOLS.forEach(s => {
                     if (s.type === 'crypto') {
                         const t = Array.isArray(cryptos) ? cryptos.find(c => c.symbol === s.id) : null;
                         if (t) marketData[s.id] = { price: parseFloat(t.lastPrice), change: parseFloat(t.priceChangePercent) };
                     } else {
-                        const t = priceMap[s.ticker];
-                        if (t) marketData[s.id] = { price: t.p, change: t.c };
-                        else if (!marketData[s.id]) marketData[s.id] = { price: 0, change: 0 };
+                        const t = priceMap[s.ticker] || priceMap[s.id];
+                        if (t && typeof t.p === 'number') {
+                            marketData[s.id] = { price: t.p, change: t.c || 0 };
+                        }
                     }
                 });
 
-                document.getElementById('sync-status').innerText = `已精準同步: ${new Date().toLocaleTimeString()}`;
+                document.getElementById('sync-status').innerText = `更新完成: ${new Date().toLocaleTimeString()}`;
             } catch (err) {
-                document.getElementById('sync-status').innerText = "連線異常，自動切換至緩存數據...";
+                console.error("同步失敗", err);
+                document.getElementById('sync-status').innerText = "連線驗證受阻，系統自動重試中...";
             } finally {
                 pb.style.width = '100%';
                 setTimeout(() => pb.style.width = '0%', 1000);
@@ -224,26 +206,22 @@
                 const isUp = data.change >= 0;
 
                 const card = document.createElement('div');
-                card.className = 'asset-card rounded-[1.5rem] p-5 cursor-pointer flex flex-col justify-between h-40';
-                card.onclick = () => openModal(s.id);
+                card.className = 'asset-card rounded-2xl p-4 flex flex-col justify-between h-32 cursor-pointer';
                 card.innerHTML = `
                     <div class="flex justify-between items-start">
                         <div>
-                            <p class="text-[9px] mono font-bold text-blue-500 uppercase">${s.ticker}</p>
-                            <h3 class="text-sm font-black text-gray-200">${s.name}</h3>
+                            <p class="text-[8px] mono font-bold text-blue-500 uppercase">${s.ticker}</p>
+                            <h3 class="text-xs font-black text-gray-200 truncate w-24">${s.name}</h3>
                         </div>
-                        <i data-lucide="${s.type === 'crypto' ? 'coins' : 'trending-up'}" class="w-3 h-3 text-gray-600"></i>
+                        <span class="text-[9px] font-black mono ${isUp ? 'text-red-500' : 'text-green-500'}">
+                            ${isUp ? '▲' : '▼'} ${Math.abs(data.change).toFixed(2)}%
+                        </span>
                     </div>
                     <div>
                         <div class="text-lg font-black mono tracking-tighter">
-                            NT$ ${displayPrice.toLocaleString(undefined, {maximumFractionDigits: displayPrice < 100 ? 2 : 1})}
+                            ${displayPrice > 0 ? 'NT$ ' + displayPrice.toLocaleString(undefined, {maximumFractionDigits: displayPrice < 100 ? 2 : 1}) : '載入中...'}
                         </div>
-                        <div class="flex justify-between items-center mt-1">
-                            <span class="text-[8px] mono text-gray-600">${data.price.toLocaleString()} ${s.type === 'tw' ? 'TWD' : 'USD'}</span>
-                            <span class="text-[10px] font-black mono ${isUp ? 'text-red-500' : 'text-green-500'}">
-                                ${isUp ? '▲' : '▼'} ${Math.abs(data.change).toFixed(2)}%
-                            </span>
-                        </div>
+                        <p class="text-[8px] text-gray-600 font-bold mono uppercase">${data.price.toLocaleString()} ${s.type === 'tw' ? 'TWD' : 'USD'}</p>
                     </div>
                 `;
                 grid.appendChild(card);
@@ -251,24 +229,7 @@
             lucide.createIcons();
         }
 
-        function openModal(id) {
-            const s = SYMBOLS.find(x => x.id === id);
-            const d = marketData[id] || { price: 0, change: 0 };
-            const displayPrice = s.type === 'tw' ? d.price : d.price * usdToTwd;
-
-            document.getElementById('modal-name').innerText = s.name;
-            document.getElementById('modal-ticker').innerText = s.ticker;
-            document.getElementById('modal-price-twd').innerText = `NT$ ${displayPrice.toLocaleString()}`;
-            document.getElementById('modal-price-lot').innerText = `NT$ ${(displayPrice * s.lot).toLocaleString(undefined, {maximumFractionDigits: 0})}`;
-            document.getElementById('modal-lot-label').innerText = s.type === 'tw' ? '每張報價 (1000股)' : '基本單位報價 (1:1)';
-            document.getElementById('modal-intro').innerText = s.intro;
-            document.getElementById('modal').classList.remove('hidden');
-            lucide.createIcons();
-        }
-
-        function closeModal() { document.getElementById('modal').classList.add('hidden'); }
-
-        function setFilter(type) {
+        function setFilter(type, event) {
             currentFilter = type;
             document.querySelectorAll('.filter-btn').forEach(btn => {
                 btn.classList.remove('bg-blue-600', 'text-white');
@@ -279,7 +240,10 @@
             render();
         }
 
-        window.onload = () => { syncData(); setInterval(syncData, 60000); };
+        window.onload = () => {
+            syncData();
+            setInterval(syncData, 60000);
+        };
     </script>
 </body>
 </html>
