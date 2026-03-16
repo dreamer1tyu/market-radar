@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Market Radar Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap');
+        
+        :root {
+            --bg: #000000;
+            --card-bg: #0a0a0a;
+            --border: #1a1a1a;
+        }
+
+        body { 
+            font-family: 'Inter', -apple-system, sans-serif; 
+            background-color: var(--bg); 
+            color: #fff;
+            -webkit-tap-highlight-color: transparent;
+            overscroll-behavior-y: contain;
+        }
+
+        .mono { font-family: 'JetBrains Mono', monospace; }
+
+        .stock-card {
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        @media (hover: hover) {
+            .stock-card:hover {
+                background-color: #111;
+                border-color: #333;
+                transform: translateY(-2px);
+            }
+        }
+        .stock-card:active { transform: scale(0.98); }
+
+        /* 響應式彈窗 */
+        #detail-modal { transition: opacity 0.3s ease; }
+        #modal-panel {
+            transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+            transform: translateY(100%);
+        }
+        
+        @media (min-width: 768px) {
+            #modal-panel {
+                transform: scale(0.9) translateY(0);
+                margin: auto;
+                border-radius: 2.5rem;
+                max-width: 850px;
+            }
+            #detail-modal.active #modal-panel { transform: scale(1) translateY(0); }
+        }
+
+        #detail-modal.active #modal-panel { transform: translateY(0); }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+    </style>
+</head>
+<body class="safe-top safe-bottom min-h-screen">
+
+    <!-- 導航列 -->
+    <nav class="sticky top-0 z-40 bg-black/80 backdrop-blur-lg border-b border-gray-900 px-6 py-4">
+        <div class="max-w-6xl mx-auto flex justify-between items-center">
+            <div>
+                <h1 class="text-xl md:text-2xl font-black tracking-tighter italic">MARKET RADAR</h1>
+                <p id="last-sync" class="text-[9px] text-gray-500 font-mono mt-1 uppercase tracking-widest">Initialising...</p>
+            </div>
+            <div class="flex items-center gap-6">
+                <div id="fx-rate" class="hidden md:block text-xs text-gray-400 mono font-bold">USD/TWD: --.--</div>
+                <div class="flex flex-col items-end">
+                    <div class="md:hidden text-[10px] text-gray-500 mono mb-1">FX: --.--</div>
+                    <div class="w-20 md:w-32 h-1 bg-gray-900 rounded-full overflow-hidden">
+                        <div id="refresh-bar" class="h-full bg-white w-0 transition-all duration-1000"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主內容區 -->
+    <main class="max-w-6xl mx-auto p-4 md:p-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="main-list">
+        <div class="animate-pulse bg-gray-900/50 h-32 rounded-[2rem]"></div>
+        <div class="animate-pulse bg-gray-900/50 h-32 rounded-[2rem]"></div>
+        <div class="animate-pulse bg-gray-900/50 h-32 rounded-[2rem]"></div>
+    </main>
+
+    <!-- 詳情彈窗 -->
+    <div id="detail-modal" class="fixed inset-0 z-50 flex items-end md:items-center justify-center hidden opacity-0">
+        <div class="absolute inset-0 bg-black/80 backdrop-blur-md" onclick="closeModal()"></div>
+        <div id="modal-panel" class="relative bg-[#0d0d0d] w-full border border-gray-800 flex flex-col max-h-[92vh] md:max-h-[85vh] overflow-hidden">
+            
+            <!-- 頂部控制 -->
+            <div class="flex justify-between items-center px-8 py-6">
+                <div class="md:hidden w-12 h-1.5 bg-gray-800 rounded-full mx-auto" onclick="closeModal()"></div>
+                <button class="hidden md:block text-gray-500 hover:text-white transition-colors" onclick="closeModal()">
+                    <i data-lucide="x-circle" class="w-8 h-8"></i>
+                </button>
+            </div>
+
+            <!-- 分頁導覽 -->
+            <div class="px-8 pb-4">
+                <div class="flex p-1 bg-gray-900/50 rounded-2xl mb-8 max-w-sm mx-auto border border-white/5">
+                    <button onclick="switchTab('info')" id="tab-info" class="flex-1 py-2 text-xs font-bold rounded-xl transition-all bg-white text-black shadow-lg">即時報價</button>
+                    <button onclick="switchTab('profile')" id="tab-profile" class="flex-1 py-2 text-xs font-bold rounded-xl transition-all text-gray-400">公司分析</button>
+                    <button onclick="switchTab('calc')" id="tab-calc" class="flex-1 py-2 text-xs font-bold rounded-xl transition-all text-gray-400">資產試算</button>
+                </div>
+            </div>
+
+            <!-- 捲動內容區 -->
+            <div class="px-8 pb-12 overflow-y-auto no-scrollbar flex-grow">
+                
+                <!-- Tab: Info -->
+                <div id="view-info" class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div id="modal-info-content"></div>
+                    <div class="h-56 md:h-auto min-h-[250px] bg-gray-900/30 rounded-[2.5rem] p-6 border border-white/5 relative">
+                        <canvas id="mini-chart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Tab: Profile -->
+                <div id="view-profile" class="hidden">
+                    <div id="profile-content" class="max-w-2xl mx-auto py-4"></div>
+                </div>
+
+                <!-- Tab: Calculator -->
+                <div id="view-calc" class="hidden">
+                    <div id="calculator-ui" class="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto italic">
+                        <div class="space-y-8">
+                            <div>
+                                <div class="flex justify-between mb-4"><label class="text-xs font-black text-gray-500 uppercase tracking-widest">預期年化報酬率</label><span id="label-roi" class="text-blue-500 mono font-bold text-lg">7%</span></div>
+                                <input type="range" id="input-roi" min="1" max="30" value="7" class="w-full accent-blue-500" oninput="calculateCompound()">
+                            </div>
+                            <div>
+                                <div class="flex justify-between mb-4"><label class="text-xs font-black text-gray-500 uppercase tracking-widest">計畫投資年限</label><span id="label-years" class="text-blue-500 mono font-bold text-lg">10y</span></div>
+                                <input type="range" id="input-years" min="1" max="40" value="10" class="w-full accent-blue-500" oninput="calculateCompound()">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-black text-gray-500 uppercase tracking-widest mb-4">每月定期定額 (股數)</label>
+                                <input type="number" id="input-shares" value="10" class="w-full bg-gray-900 border border-gray-800 rounded-2xl p-4 mono text-2xl font-black text-white outline-none focus:border-blue-500/50 transition-colors" oninput="calculateCompound()">
+                            </div>
+                        </div>
+                        <div class="bg-gradient-to-br from-blue-600 to-indigo-900 rounded-[3rem] p-10 flex flex-col justify-center shadow-2xl relative overflow-hidden">
+                            <div class="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
+                                <svg width="100%" height="100%"><rect width="100%" height="100%" fill="url(#grid)"/></svg>
+                            </div>
+                            <p class="text-[10px] text-blue-100 font-bold uppercase mb-4 tracking-[0.2em] opacity-80">預計資產總額 (TWD)</p>
+                            <div class="text-4xl lg:text-5xl font-black mono tracking-tighter text-white" id="calc-result">NT$ 0</div>
+                            <p class="text-[10px] text-blue-200 mt-8 leading-relaxed opacity-60">計算基準：即時匯率 <span id="calc-current-fx">--.--</span> 及市場現價。</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const COMPANY_PROFILES = {
+            'BTCUSDT': { intro: 'Bitcoin 是去中心化數位資產的先驅，旨在成為全球性的數位價值存儲工具。', plan: '• 現貨 ETF 帶動機構級資金流入\n• 網路二層擴展性（如閃電網路）持續發展\n• 作為對沖通膨的「數位黃金」地位鞏固' },
+            'ETHUSDT': { intro: 'Ethereum 是全球最大的智慧合約平台，為 Web3、DeFi 與 NFT 生態系的基石。', plan: '• 坎昆升級大幅降低 L2 交易成本\n• 質押機制轉向更環保且安全的權益證明\n• 企業級區塊鏈應用的首選平台' },
+            'AAPL': { intro: 'Apple Inc. 是消費性電子產品領導者，以其封閉且強大的軟硬體生態系統聞名。', plan: '• Apple Intelligence 全面導入終端設備\n• Vision Pro 開啟空間運算新時代\n• 服務業收入與毛利持續擴張' },
+            'NVDA': { intro: 'NVIDIA 是全球 AI 革命的核心引擎，其 GPU 晶片支撐著當前所有的主流 AI 運算。', plan: '• Blackwell 架構晶片進入大規模量產\n• 主權 AI 需求與各國政府資料中心建設\n• CUDA 軟體平台的生態護城河持續深化' },
+            '2330.TW': { intro: '台積電 (TSMC) 是全球半導體製造龍頭，擁有最先進的製程技術與良率。', plan: '• 2奈米製程預計於 2025 年正式量產\n• 高階封裝 CoWoS 產能極速擴充\n• 全球化佈局（美、日、歐）分散地緣風險' },
+            '2454.TW': { intro: '聯發科 (MediaTek) 是全球領先的 IC 設計公司，專注於高效能、低功耗的處理器。', plan: '• 天璣系列晶片在高階智慧型手機市場佔有率提升\n• 跨足汽車電子、物聯網與 Wi-Fi 7 技術領先\n• 邊緣 AI 運算能力的整合優勢' }
+        };
+
+        const SYMBOLS = [
+            { id: 'BTCUSDT', name: 'Bitcoin', type: 'crypto' },
+            { id: 'ETHUSDT', name: 'Ethereum', type: 'crypto' },
+            { id: 'AAPL', name: 'Apple Inc.', type: 'us' },
+            { id: 'NVDA', name: 'NVIDIA Corp.', type: 'us' },
+            { id: '2330.TW', name: '台積電', type: 'tw' },
+            { id: '2454.TW', name: '聯發科', type: 'tw' }
+        ];
+
+        let marketData = {};
+        let usdToTwd = 32.25;
+        let chartObj = null;
+        let currentSelectedId = null;
+
+        async function updateFX() {
+            try {
+                const res = await fetch(`https://api.exchangerate-api.com/v4/latest/USD`);
+                const data = await res.json();
+                if (data?.rates?.TWD) {
+                    usdToTwd = data.rates.TWD;
+                    document.getElementById('fx-rate').textContent = `USD/TWD: ${usdToTwd.toFixed(2)}`;
+                }
+            } catch (e) { console.warn("FX Error"); }
+        }
+
+        async function refreshData() {
+            try {
+                await updateFX();
+                for (let item of SYMBOLS) {
+                    let price, change;
+                    if (item.type === 'crypto') {
+                        const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${item.id}`);
+                        const data = await res.json();
+                        price = parseFloat(data.lastPrice);
+                        change = parseFloat(data.priceChangePercent);
+                    } else {
+                        const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${item.id}?interval=1d&range=1d`);
+                        const data = await res.json();
+                        const result = data.chart.result[0].meta;
+                        price = result.regularMarketPrice;
+                        change = ((price - result.previousClose) / result.previousClose) * 100;
+                    }
+                    marketData[item.id] = { ...item, price, change };
+                }
+                renderMainList();
+                document.getElementById('last-sync').textContent = `SYNC: ${new Date().toLocaleTimeString('zh-TW', {hour12: false})}`;
+                if (currentSelectedId) calculateCompound();
+            } catch (e) { console.error(e); }
+        }
+
+        function renderMainList() {
+            const list = document.getElementById('main-list');
+            list.innerHTML = '';
+            SYMBOLS.forEach(item => {
+                const data = marketData[item.id];
+                if (!data) return;
+                const isUp = data.change >= 0;
+                const card = document.createElement('div');
+                card.className = 'stock-card bg-[#0a0a0a] border border-[#1a1a1a] rounded-[2.5rem] p-8 flex justify-between items-center';
+                card.onclick = () => openModal(data.id);
+                
+                const colors = { crypto: 'from-orange-500 to-orange-700', us: 'from-blue-500 to-blue-700', tw: 'from-red-500 to-red-700' };
+
+                card.innerHTML = `
+                    <div class="flex items-center gap-6">
+                        <div class="w-1.5 h-12 rounded-full ${isUp ? 'bg-red-500' : 'bg-green-500'}"></div>
+                        <div>
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="text-[9px] font-extrabold uppercase bg-gradient-to-r ${colors[item.type]} px-2 py-0.5 rounded tracking-[0.1em]">${item.type}</span>
+                                <span class="text-[10px] text-gray-600 mono font-bold uppercase">${data.id}</span>
+                            </div>
+                            <div class="font-black text-xl text-gray-100 tracking-tight">${data.name}</div>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <div class="font-black text-2xl mono tracking-tighter">${data.price.toLocaleString(undefined, {minimumFractionDigits: 2})}</div>
+                        <div class="text-xs font-black ${isUp ? 'text-red-500' : 'text-green-500'}">${isUp ? '▲' : '▼'} ${Math.abs(data.change).toFixed(2)}%</div>
+                    </div>
+                `;
+                list.appendChild(card);
+            });
+            lucide.createIcons();
+        }
+
+        function openModal(id) {
+            currentSelectedId = id;
+            const data = marketData[id];
+            const profile = COMPANY_PROFILES[id];
+            const modal = document.getElementById('detail-modal');
+            
+            const infoContent = document.getElementById('modal-info-content');
+            const unitTwd = data.type === 'tw' ? data.price : data.price * usdToTwd;
+            infoContent.innerHTML = `
+                <div class="mb-8 text-center md:text-left">
+                    <h2 class="text-5xl md:text-6xl font-black tracking-tighter mb-2">${data.name}</h2>
+                    <p class="text-xs text-gray-500 mono font-bold tracking-[0.5em] uppercase">${data.id}</p>
+                </div>
+                <div class="mb-12 text-center md:text-left">
+                    <div class="text-[10px] text-gray-500 font-bold uppercase mb-4 tracking-widest italic">Live Market Quote</div>
+                    <div class="text-7xl font-black mono tracking-tighter">${data.price.toLocaleString(undefined, {minimumFractionDigits: 2})}</div>
+                </div>
+                <div class="grid grid-cols-1 gap-4 max-w-sm mx-auto md:mx-0">
+                    <div class="bg-white/5 rounded-[2rem] p-6 border border-white/10 flex justify-between items-center">
+                        <span class="text-[10px] font-black text-gray-500 uppercase">1 Share (TWD)</span>
+                        <span class="text-2xl font-black mono tracking-tighter text-blue-500">NT$ ${unitTwd.toLocaleString(undefined, {maximumFractionDigits: 2})}</span>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('profile-content').innerHTML = `
+                <div class="space-y-12">
+                    <section><h4 class="text-[10px] font-black text-indigo-500 uppercase tracking-[0.3em] mb-6 italic flex items-center gap-2"><i data-lucide="info" class="w-4 h-4"></i> Corporate Essence</h4><p class="text-gray-300 leading-relaxed text-base">${profile?.intro}</p></section>
+                    <section><h4 class="text-[10px] font-black text-indigo-500 uppercase tracking-[0.3em] mb-6 italic flex items-center gap-2"><i data-lucide="trending-up" class="w-4 h-4"></i> Strategic Growth Plan</h4><div class="text-gray-300 text-base leading-relaxed space-y-4 whitespace-pre-line">${profile?.plan}</div></section>
+                </div>
+            `;
+
+            modal.classList.remove('hidden');
+            setTimeout(() => { modal.classList.add('active'); modal.style.opacity = '1'; }, 10);
+            switchTab('info');
+            renderChart(data);
+            calculateCompound();
+            lucide.createIcons();
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('detail-modal');
+            modal.classList.remove('active');
+            modal.style.opacity = '0';
+            setTimeout(() => { modal.classList.add('hidden'); currentSelectedId = null; }, 300);
+        }
+
+        function switchTab(tab) {
+            ['info', 'profile', 'calc'].forEach(t => {
+                document.getElementById(`view-${t}`).classList.toggle('hidden', t !== tab);
+                const btn = document.getElementById(`tab-${t}`);
+                if (t === tab) btn.className = 'flex-1 py-2 text-xs font-bold rounded-xl bg-white text-black shadow-xl';
+                else btn.className = 'flex-1 py-2 text-xs font-bold rounded-xl text-gray-500 hover:text-gray-300 transition-colors';
+            });
+        }
+
+        function calculateCompound() {
+            if (!currentSelectedId) return;
+            const data = marketData[currentSelectedId];
+            const roi = parseFloat(document.getElementById('input-roi').value) / 100;
+            const years = parseInt(document.getElementById('input-years').value);
+            const shares = parseInt(document.getElementById('input-shares').value) || 0;
+            
+            document.getElementById('label-roi').textContent = (roi * 100).toFixed(0) + '%';
+            document.getElementById('label-years').textContent = years + 'y';
+
+            const unitPriceTwd = data.type === 'tw' ? data.price : data.price * usdToTwd;
+            const monthlyContr = shares * unitPriceTwd;
+            const r_m = roi / 12, n_m = years * 12;
+            let finalValue = (r_m === 0) ? (monthlyContr * n_m) : (monthlyContr * ((Math.pow(1 + r_m, n_m) - 1) / r_m) * (1 + r_m));
+
+            document.getElementById('calc-result').textContent = 'NT$ ' + Math.round(finalValue).toLocaleString();
+            document.getElementById('calc-current-fx').textContent = usdToTwd.toFixed(2);
+        }
+
+        function renderChart(data) {
+            const ctx = document.getElementById('mini-chart').getContext('2d');
+            if (chartObj) chartObj.destroy();
+            const points = Array.from({length: 25}, () => data.price * (1 + (Math.random() * 0.02 - 0.01)));
+            chartObj = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: points.map(() => ''),
+                    datasets: [{
+                        data: points,
+                        borderColor: data.change >= 0 ? '#ef4444' : '#22c55e',
+                        borderWidth: 5, pointRadius: 0, tension: 0.4,
+                        fill: true,
+                        backgroundColor: (context) => {
+                            const chart = context.chart;
+                            const {ctx, chartArea} = chart;
+                            if (!chartArea) return null;
+                            const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+                            gradient.addColorStop(0, data.change >= 0 ? 'rgba(239, 68, 68, 0.1)' : 'rgba(34, 197, 94, 0.1)');
+                            gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                            return gradient;
+                        }
+                    }]
+                },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    plugins: { legend: { display: false }, tooltip: { enabled: false } }, 
+                    scales: { x: { display: false }, y: { display: false } } 
+                }
+            });
+        }
+
+        refreshData();
+        setInterval(refreshData, 300000);
+        setInterval(() => {
+            const bar = document.getElementById('refresh-bar');
+            let w = parseFloat(bar.style.width) || 0;
+            if (w >= 100) {
+                w = 0;
+                bar.style.transition = 'none';
+                bar.style.width = '0%';
+                setTimeout(() => bar.style.transition = 'all 1000s linear', 10);
+            } else {
+                bar.style.width = (w + (100/300)) + '%';
+            }
+        }, 1000);
+        lucide.createIcons();
+    </script>
+</body>
+</html>
